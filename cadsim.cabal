@@ -32,7 +32,7 @@ Author:              Chetan Taralekar
 Maintainer:          chetant@gmail.com
 
 -- A copyright notice.
--- Copyright:           
+Copyright:           (c) Chetan Taralekar 2011, 2012
 
 Category:            Graphics
 
@@ -48,10 +48,11 @@ Cabal-version:       >=1.2
 
 Library
   -- Modules exported by the library.
-  -- Exposed-modules:     
+  Exposed-modules:     Graphics.CadSim
+                       Graphics.CadSim.Path
   
   -- Packages needed in order to build this package.
-  -- Build-depends:       
+  Build-depends:       base > 4
   
   -- Modules not exported by this package.
   -- Other-modules:       
