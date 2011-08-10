@@ -66,7 +66,7 @@ drawScene = do
   
   glFlush
 
-toGl = fromRational . toRational
+toGl = realToFrac
 
 drawPath :: Path a => a -> IO ()
 drawPath path = do
@@ -78,10 +78,12 @@ drawPath path = do
 
   glTranslatef 0 0 (-6.0) --Move left 1.5 Units and into the screen 6.0
 
-  glBegin gl_LINE_LOOP
-  mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) $ getExterior path
-  glEnd
-  
+  let drawPath_ p = do
+          glBegin gl_LINE_LOOP
+          mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) $ getExterior p
+          mapM_ drawPath $ getHoles p
+          glEnd
+  drawPath_ path
   glFlush
 
 shutdown :: GLFW.WindowCloseCallback
