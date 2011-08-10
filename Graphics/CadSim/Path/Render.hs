@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances #-}
 module Graphics.CadSim.Path.Render
 (
 render_
@@ -11,7 +12,11 @@ import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
 import Control.Monad(forever)
 
-import Graphics.CadSim.Path_
+import Graphics.CadSim.Path
+import Graphics.CadSim.Render
+
+instance (Path a) => Renderable a where
+    render = render_
 
 initGL :: IO ()
 initGL = do
@@ -57,6 +62,24 @@ drawScene = do
   glVertex3f   1    1  0 -- top right
   glVertex3f   1  (-1) 0 -- bottom right
   glVertex3f (-1) (-1) 0 -- bottom left
+  glEnd
+  
+  glFlush
+
+toGl = fromRational . toRational
+
+drawPath :: Path a => a -> IO ()
+drawPath path = do
+  
+  -- clear the screen and the depth bufer
+  glClear $ fromIntegral  $  gl_COLOR_BUFFER_BIT
+                         .|. gl_DEPTH_BUFFER_BIT
+  glLoadIdentity -- reset view
+
+  glTranslatef 0 0 (-6.0) --Move left 1.5 Units and into the screen 6.0
+
+  glBegin gl_LINE_LOOP
+  mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) $ getExterior path
   glEnd
   
   glFlush
@@ -108,5 +131,5 @@ render_ p = do
      initGL
      -- start event processing engine
      forever $ do
-       drawScene
+       drawPath p
        GLFW.swapBuffers

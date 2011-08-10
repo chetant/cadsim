@@ -4,26 +4,53 @@ module Graphics.CadSim.Path
  Point(..)
 ,Points(..)
 ,Face(..)
+,Path(..)
+,NumberConv(..)
 ) where
+
+import GHC.Float(float2Double)
 
 import Graphics.CadSim.Move
 import Graphics.CadSim.Boolean
-import Graphics.CadSim.Render
 
-import Graphics.CadSim.Path_
-import Graphics.CadSim.Path.Render
+data Point = Point {
+      pointX :: Double
+    , pointY :: Double
+    }
+
+instance Show Point where
+    show (Point x y) = "(" ++ show x ++ ", " ++ show y ++ ")"
+
+type Points = [Point]
+
+class Path a where
+    getExterior :: a -> Points
+    getHoles :: a -> [Points]
+    getHoles _ = []
 
 data Face = Face {
       exterior :: Points
     , holes :: [Points]
     }
 
---------- Instances for Path -------
-instance Path [(Int, Int)] where
-    getExterior = map (\(x,y) -> Point (fromIntegral x) (fromIntegral y))
+mapTuple f = map (\(x,y) -> Point (f x) (f y))
 
-instance Path [(Double, Double)] where
-    getExterior = map (uncurry Point)
+-- Type class to get around having dupe instances
+class NumberConv a where
+    numToDouble :: a -> Double
+
+instance Integral a => NumberConv a where
+    numToDouble = fromIntegral
+
+instance NumberConv Double where
+    numToDouble = id
+
+instance NumberConv Float where
+    numToDouble = float2Double
+
+--------- Instances for Path -------
+instance NumberConv a => Path [(a, a)] where
+    getExterior = mapTuple numToDouble
 
 instance Path Face where
     getExterior = exterior
@@ -39,8 +66,3 @@ instance (Path a) => BooleanOps a where
     union a b = a
     intersection a b = a
     xor a b = a
-
---------- Path Instance for Renderable -------
-instance (Path a) => Renderable a where
-    render = render_
-
