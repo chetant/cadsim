@@ -7,12 +7,13 @@ render_
 import qualified Graphics.UI.GLFW as GLFW
 -- everything from here starts with gl or GL
 import Graphics.Rendering.OpenGL.Raw
-import Graphics.Rendering.GLU.Raw(gluPerspective)
+import Graphics.Rendering.GLU.Raw(gluOrtho2D)
 import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
 import Control.Monad(forever)
 
 import Graphics.CadSim.Path
+import Graphics.CadSim.Move
 import Graphics.CadSim.Render
 
 instance (Path a) => Renderable a where
@@ -27,14 +28,14 @@ initGL = do
   glDepthFunc gl_LEQUAL  -- type of depth test
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
 
-resizeScene :: GLFW.WindowSizeCallback
-resizeScene w     0      = resizeScene w 1 -- prevent divide by zero
-resizeScene width height = do
+resizeScene :: (Point, Point) -> GLFW.WindowSizeCallback
+resizeScene ps w     0      = resizeScene ps w 1 -- prevent divide by zero
+resizeScene (minPt, maxPt) width height = do
   glViewport 0 0 (fromIntegral width) (fromIntegral height)
   glMatrixMode gl_PROJECTION
   glLoadIdentity
-  gluPerspective 45 (fromIntegral width/fromIntegral height) 0.1 100
-  -- gluOrth2D 
+  -- gluPerspective 45 (fromIntegral width/fromIntegral height) 0.1 100
+  gluOrtho2D (toGlX minPt) (toGlX maxPt) (toGlY minPt) (toGlY maxPt)
   glMatrixMode gl_MODELVIEW
   glLoadIdentity
   glFlush
@@ -46,7 +47,7 @@ drawScene = do
                          .|. gl_DEPTH_BUFFER_BIT
   glLoadIdentity -- reset view
 
-  glTranslatef (-1.5) 0 (-6.0) --Move left 1.5 Units and into the screen 6.0
+  glTranslatef 0 0 (-0.5) --Move left 1.5 Units and into the screen 6.0
   
   -- draw a triangle
   glBegin gl_TRIANGLES
@@ -66,24 +67,26 @@ drawScene = do
   
   glFlush
 
+toGlX = realToFrac . pointX
+toGlY = realToFrac . pointY
 toGl = realToFrac
 
-drawPath :: Path a => a -> IO ()
-drawPath path = do
+drawPath :: (Point, Point) -> Path a => a -> IO ()
+drawPath (minPt, maxPt) path = do
   
   -- clear the screen and the depth bufer
   glClear $ fromIntegral  $  gl_COLOR_BUFFER_BIT
                          .|. gl_DEPTH_BUFFER_BIT
   glLoadIdentity -- reset view
 
-  glTranslatef 0 0 (-6.0) --Move left 1.5 Units and into the screen 6.0
+  glTranslatef 0 0 (-0.5) --Move left 1.5 Units and into the screen 6.0
 
-  let drawPath_ p = do
+  let drawPath_ ps = do
           glBegin gl_LINE_LOOP
-          mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) $ getExterior p
-          mapM_ drawPath $ getHoles p
+          mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) ps
           glEnd
-  drawPath_ path
+  drawPath_ $ getExterior path
+  mapM_ drawPath_ $ getHoles path
   glFlush
 
 shutdown :: GLFW.WindowCloseCallback
@@ -125,7 +128,13 @@ render_ p = do
      -- register the function to do all our OpenGL drawing
      GLFW.setWindowRefreshCallback drawScene
      -- register the funciton called when our window is resized
-     GLFW.setWindowSizeCallback resizeScene
+     let scaleFactor = 0.1
+         size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
+         extents@(p1, p2) = getExtents p
+         extents' = (toPoint (-size) `translate` p1, toPoint size `translate` p2)
+     print size
+     print extents'
+     GLFW.setWindowSizeCallback (resizeScene extents')
      -- register the function called when the keyboard is pressed.
      GLFW.setKeyCallback keyPressed
      GLFW.setWindowCloseCallback shutdown
@@ -133,5 +142,5 @@ render_ p = do
      initGL
      -- start event processing engine
      forever $ do
-       drawPath p
+       drawPath extents p
        GLFW.swapBuffers
