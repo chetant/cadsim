@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, TypeSynonymInstances #-}
 module Graphics.CadSim.Path
 (
  Point(..)
@@ -7,11 +7,11 @@ module Graphics.CadSim.Path
 ,Points(..)
 ,Face(..)
 ,Path(..)
-,NumberConv(..)
 ) where
 
 import GHC.Float(float2Double)
 import Data.List(foldl')
+import Data.Convertible
 
 import Graphics.CadSim.Move
 import Graphics.CadSim.Boolean
@@ -37,6 +37,15 @@ instance Moveable Point Extents Extents where
     scale     s (p1, p2) = (scale s p1, scale s p2)
     rotate _ path = undefined
 
+instance Num Point where
+    a + b = a `translate` b
+    a * b = a `scale` b
+    a - b = a `translate` (negate b)
+    negate a = (toPoint ((-1) :: Double) `scale` a)
+    abs = undefined
+    signum = undefined
+    fromInteger = undefined
+
 dist :: Point -> Point -> Double
 dist (Point x1 y1) (Point x2 y2) = sqrt $ dx2 + dy2
     where dx = x2 - x1
@@ -50,17 +59,20 @@ distX (Point x1 _) (Point x2 _) = x2 - x1
 distY :: Point -> Point -> Double
 distY (Point _ y1) (Point _ y2) = y2 - y1
 
-toPoint :: (NumberConv n) => n -> Point
+instance Convertible Double Double where
+    safeConvert = Right
+
+toPoint :: (Convertible n Double) => n -> Point
 toPoint n = Point n' n'
-    where n' = numToPointNum n
+    where n' = convert n
 
-toPointX :: (NumberConv n) => n -> Point
+toPointX :: (Convertible n Double) => n -> Point
 toPointX n = Point n' 0
-    where n' = numToPointNum n
+    where n' = convert n
 
-toPointY :: (NumberConv n) => n -> Point
+toPointY :: (Convertible n Double) => n -> Point
 toPointY n = Point 0  n'
-    where n' = numToPointNum n
+    where n' = convert n
 
 class Path a where
     getExterior :: a -> Points
@@ -85,22 +97,9 @@ data Face = Face {
 
 mapTuple f = map (\(x,y) -> Point (f x) (f y))
 
--- Type class to get around having dupe instances
-class NumberConv a where
-    numToPointNum :: a -> Double
-
-instance NumberConv Int where
-    numToPointNum = fromIntegral
-
-instance NumberConv Double where
-    numToPointNum = id
-
-instance NumberConv Float where
-    numToPointNum = float2Double
-
 --------- Instances for Path -------
-instance NumberConv a => Path [(a, a)] where
-    getExterior = mapTuple numToPointNum
+instance Convertible a Double => Path [(a, a)] where
+    getExterior = mapTuple convert
 
 instance Path Face where
     getExterior = exterior

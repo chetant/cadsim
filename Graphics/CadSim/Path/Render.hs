@@ -127,11 +127,12 @@ render_ p = do
      GLFW.setWindowTitle "CadSim"
      -- register the function to do all our OpenGL drawing
      GLFW.setWindowRefreshCallback drawScene
-     -- register the funciton called when our window is resized
+     -- register the function called when our window is resized
      let scaleFactor = 0.1
          size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
          extents@(p1, p2) = getExtents p
-         extents' = (toPoint (-size) `translate` p1, toPoint size `translate` p2)
+         -- (_, dims) = (toPoint (-1) `scale` p1) `translate` 
+         extents' = (toPoint (-size) + p1, toPoint size + p2)
      print size
      print extents'
      GLFW.setWindowSizeCallback (resizeScene extents')
