@@ -27,6 +27,10 @@ initGL = do
   glEnable gl_DEPTH_TEST
   glDepthFunc gl_LEQUAL  -- type of depth test
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
+  glEnable gl_LINE_SMOOTH
+  glHint gl_LINE_SMOOTH_HINT gl_NICEST
+  glEnable gl_BLEND
+  glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
 
 resizeScene :: (Point, Point) -> GLFW.WindowSizeCallback
 resizeScene ps w     0      = resizeScene ps w 1 -- prevent divide by zero
@@ -83,9 +87,9 @@ maxNonInfiniteFloat a = encodeFloat m n where
 
 drawOrigin = do
   let max = 1000000 -- maxNonInfiniteFloat undefined
-  glLineWidth 1
   glLineStipple 1 0x00FF
   glEnable gl_LINE_STIPPLE
+  glLineWidth 0.5
   glBegin gl_LINES
   -- x axis
   glVertex3f (-max) 0 0
@@ -95,6 +99,7 @@ drawOrigin = do
   glVertex3f 0 max 0
   glEnd
   glDisable gl_LINE_STIPPLE
+  glLineWidth 1
 
 drawPath :: Path a => Bool -> a -> IO ()
 drawPath drawOriginAxes path = do
@@ -113,6 +118,7 @@ drawPath drawOriginAxes path = do
           glEnd
   drawPath_ $ getExterior path
   mapM_ drawPath_ $ getHoles path
+  glLineWidth 1
   glFlush
 
 shutdown :: GLFW.WindowCloseCallback
