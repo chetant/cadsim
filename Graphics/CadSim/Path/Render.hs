@@ -10,7 +10,7 @@ import Graphics.Rendering.OpenGL.Raw
 import Graphics.Rendering.GLU.Raw(gluOrtho2D)
 import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
-import Control.Monad(forever)
+import Control.Monad(when, forever)
 
 import Graphics.CadSim.Path
 import Graphics.CadSim.Move
@@ -30,12 +30,18 @@ initGL = do
 
 resizeScene :: (Point, Point) -> GLFW.WindowSizeCallback
 resizeScene ps w     0      = resizeScene ps w 1 -- prevent divide by zero
-resizeScene (minPt, maxPt) width height = do
+resizeScene e@(minPt, maxPt) width height = do
+  let Point dx dy = maxPt - minPt
+      Point cx cy = getCenter e
+      hdx = dx / 2
+      hdy = dy / 2
+      aScr = fromIntegral width / fromIntegral height
+      aPth = if dy == 0 then dx else (dx / dy)
+      (hw, hh) = if aPth > aScr then (hdx, hdx / aScr) else (hdy*aScr, hdy)
   glViewport 0 0 (fromIntegral width) (fromIntegral height)
   glMatrixMode gl_PROJECTION
   glLoadIdentity
-  -- gluPerspective 45 (fromIntegral width/fromIntegral height) 0.1 100
-  gluOrtho2D (toGlX minPt) (toGlX maxPt) (toGlY minPt) (toGlY maxPt)
+  gluOrtho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
   glMatrixMode gl_MODELVIEW
   glLoadIdentity
   glFlush
@@ -67,23 +73,43 @@ drawScene = do
   
   glFlush
 
-toGlX = realToFrac . pointX
-toGlY = realToFrac . pointY
-toGl = realToFrac
+maxNonInfiniteFloat :: RealFloat a => a -> a
+maxNonInfiniteFloat a = encodeFloat m n where
+    b = floatRadix a
+    e = floatDigits a
+    (_, e') = floatRange a
+    m = b ^ e - 1
+    n = e' - e
 
-drawPath :: (Point, Point) -> Path a => a -> IO ()
-drawPath (minPt, maxPt) path = do
-  
+drawOrigin = do
+  let max = 1000000 -- maxNonInfiniteFloat undefined
+  glLineWidth 1
+  glLineStipple 1 0x00FF
+  glEnable gl_LINE_STIPPLE
+  glBegin gl_LINES
+  -- x axis
+  glVertex3f (-max) 0 0
+  glVertex3f max 0 0
+  -- y axis
+  glVertex3f 0 (-max) 0
+  glVertex3f 0 max 0
+  glEnd
+  glDisable gl_LINE_STIPPLE
+
+drawPath :: Path a => Bool -> a -> IO ()
+drawPath drawOriginAxes path = do
   -- clear the screen and the depth bufer
   glClear $ fromIntegral  $  gl_COLOR_BUFFER_BIT
                          .|. gl_DEPTH_BUFFER_BIT
-  glLoadIdentity -- reset view
+  glLoadIdentity
+  glTranslatef 0 0 (-0.5)
 
-  glTranslatef 0 0 (-0.5) --Move left 1.5 Units and into the screen 6.0
+  when drawOriginAxes drawOrigin
 
+  glLineWidth 2
   let drawPath_ ps = do
           glBegin gl_LINE_LOOP
-          mapM_ (\(Point x y) -> glVertex3f (toGl x) (toGl y) 0) ps
+          mapM_ (\(Point x y) -> glVertex3f (realToFrac x) (realToFrac y) 0) ps
           glEnd
   drawPath_ $ getExterior path
   mapM_ drawPath_ $ getHoles path
@@ -131,7 +157,6 @@ render_ p = do
      let scaleFactor = 0.1
          size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
          extents@(p1, p2) = getExtents p
-         -- (_, dims) = (toPoint (-1) `scale` p1) `translate` 
          extents' = (toPoint (-size) + p1, toPoint size + p2)
      print size
      print extents'
@@ -143,5 +168,5 @@ render_ p = do
      initGL
      -- start event processing engine
      forever $ do
-       drawPath extents p
+       drawPath True p
        GLFW.swapBuffers

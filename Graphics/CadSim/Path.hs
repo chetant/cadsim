@@ -5,6 +5,7 @@ module Graphics.CadSim.Path
 ,toPoint,toPointX,toPointY
 ,dist,distX,distY
 ,Points(..)
+,Extents(..), getCenter
 ,Face(..)
 ,Path(..)
 ) where
@@ -37,14 +38,17 @@ instance Moveable Point Extents Extents where
     scale     s (p1, p2) = (scale s p1, scale s p2)
     rotate _ path = undefined
 
+getCenter :: Extents -> Point
+getCenter ((Point x1 y1), (Point x2 y2)) = Point ((x2 + x1) / 2) ((y2 + y1) / 2)
+
 instance Num Point where
     a + b = a `translate` b
     a * b = a `scale` b
     a - b = a `translate` (negate b)
     negate a = (toPoint ((-1) :: Double) `scale` a)
-    abs = undefined
-    signum = undefined
-    fromInteger = undefined
+    abs (Point x y) = Point (abs x) (abs y)
+    signum (Point x y) = Point (signum x) (signum y)
+    fromInteger = toPoint
 
 dist :: Point -> Point -> Double
 dist (Point x1 y1) (Point x2 y2) = sqrt $ dx2 + dy2
