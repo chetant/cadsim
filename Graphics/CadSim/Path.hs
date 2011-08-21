@@ -14,6 +14,8 @@ import GHC.Float(float2Double)
 import Data.List(foldl')
 import Data.Convertible
 
+import qualified Algebra.Clipper as C
+
 import Graphics.CadSim.Move
 import Graphics.CadSim.Boolean
 
@@ -108,6 +110,42 @@ instance Convertible a Double => Path [(a, a)] where
 instance Path Face where
     getExterior = exterior
     getHoles = holes
+
+--------- Instances for Clipper Data types -------
+
+instance Convertible C.IntPoint Point where
+    safeConvert ip = Right $ Point (fromIntegral (C.pointX ip)) (fromIntegral (C.pointY ip))
+
+instance Convertible Point C.IntPoint where
+    safeConvert (Point x y) = Right $ C.IntPoint (round x) (round y)
+
+-- instance Path C.Polygon where
+--     getExterior = map convert . C.getPoints
+--     getHoles _ = []
+
+-- instance Path C.Polygons where
+--     getExterior ps = if null polys then [] else (map convert . C.getPoints . head) polys
+--         where polys = C.getPolys ps
+--     getHoles ps = map (map convert . C.getPoints) . tail $ polys
+--         where polys = C.getPolys ps
+
+-- instance Convertible Face (Double, C.Polygon) where
+--     safeConvert face = Right $ C.Polygon []
+--         where extents = getExtents face
+--               -- TODO: get scale factor that makes all points integers without any loss
+
+instance Convertible C.Polygon Face where
+    safeConvert ps = Right $ Face exterior []
+        where exterior = (map convert . C.getPoints) ps
+
+instance Convertible C.Polygons Face where
+    safeConvert ps = Right $ Face exterior holes
+        where exterior = if null polys then [] else (map convert . C.getPoints . head) polys
+              holes = map (map convert . C.getPoints) . tail $ polys
+              polys = C.getPolys ps
+
+-- instance Convertible Point C.IntPoint where
+--     safeConvert (Point x y) = Right $ C.IntPoint (round x) (round y)
 
 --------- Path Instance for Moveable and Boolean -------
 instance (Path a) => Moveable Point a Face where
