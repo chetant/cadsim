@@ -8,11 +8,15 @@ module Graphics.CadSim.Path
 ,Extents(..), getCenter
 ,Face(..)
 ,Path(..)
+,getScaleFactor
 ) where
 
 import GHC.Float(float2Double)
 import Data.List(foldl')
 import Data.Convertible
+import Data.Word
+import Data.Bits
+import System.IO.Unsafe(unsafePerformIO)
 
 import qualified Algebra.Clipper as C
 
@@ -129,10 +133,34 @@ instance Convertible Point C.IntPoint where
 --     getHoles ps = map (map convert . C.getPoints) . tail $ polys
 --         where polys = C.getPolys ps
 
--- instance Convertible Face (Double, C.Polygon) where
---     safeConvert face = Right $ C.Polygon []
---         where extents = getExtents face
---               -- TODO: get scale factor that makes all points integers without any loss
+instance (Path a) => Convertible a (Double, C.Polygon) where
+    safeConvert path = Right $ (sFactor, C.Polygon pts)
+        where path' :: Face
+              path' = (toPoint sFactor) `scale` path
+              pts = map convert $ getExterior path'
+              sFactor = getScaleFactor path
+
+instance Convertible (Double, C.Polygon) Face where
+    safeConvert (sFactor, C.Polygon pts) = Right $ Face exterior []
+        where exterior = map (sc . convert) pts
+              sc :: Point -> Point
+              sc = scale (toPoint $ 1/sFactor)
+
+instance (Path a) => Convertible a (Double, C.Polygons) where
+    safeConvert path = Right $ (sFactor, convertByScale sFactor path)
+        where sFactor = getScaleFactor path
+
+convertByScale :: (Path a) => Double -> a -> C.Polygons
+convertByScale sFactor path = C.Polygons (exterior:holes)
+        where path' :: Face
+              path' = (toPoint sFactor) `scale` path
+              exterior = C.Polygon $ map convert $ getExterior path'
+              holes = map (C.Polygon . map convert) $ getHoles path'
+
+instance Convertible (Double, C.Polygons) Face where
+    safeConvert (sFactor, C.Polygons pts) = Right $ Face (unFace exterior) (map unFace holes)
+        where (exterior:holes) = map (convert . ((,) sFactor)) pts
+              unFace (Face a _) = a
 
 instance Convertible C.Polygon Face where
     safeConvert ps = Right $ Face exterior []
@@ -157,7 +185,31 @@ instance (Path a) => Moveable Point a Face where
               holes = map (map (scale sp)) $ getHoles path
     rotate _ path = undefined
 
-instance (Path a) => BooleanOps a where
-    union a b = a
-    intersection a b = a
-    xor a b = a
+getScaleFactor :: (Path a) => a -> Double
+getScaleFactor path = fromIntegral $ 2 ^ (32 - maxDigits 63)
+    where allPoints = getExterior path ++ concat (getHoles path)
+          maxInPt m (Point x y) = max y $ max m x
+          maxPoint :: Word64
+          maxPoint = truncate $ foldl' maxInPt 0 allPoints
+          maxDigits :: Int -> Int
+          maxDigits i = case ((maxPoint `shift` (-i)) .&. 0x1) of
+                          1 -> (i+1)
+                          _ -> maxDigits (i-1)
+
+doubleConvert :: (Path a, Path b) => a -> b -> (Double, C.Polygons, C.Polygons)
+doubleConvert a b = if sFa > sFb 
+                    then (sFa, convertByScale sFa a, convertByScale sFa b)
+                    else (sFb, convertByScale sFb a, convertByScale sFb b)
+    where sFa = getScaleFactor a
+          sFb = getScaleFactor b
+
+instance (Path a) => BooleanOps a a Face where
+    union a b = 
+        case doubleConvert a b of
+          (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.union` b')
+    intersection a b = 
+        case doubleConvert a b of
+          (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.intersection` b')
+    xor a b = 
+        case doubleConvert a b of
+          (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.xor` b')

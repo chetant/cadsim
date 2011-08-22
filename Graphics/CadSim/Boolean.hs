@@ -1,7 +1,8 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Graphics.CadSim.Boolean where
 
-class BooleanOps a where
-    union :: a -> a -> a
-    intersection :: a -> a -> a
-    xor :: a -> a -> a
+class BooleanOps a b c where
+    union :: a -> b -> c
+    intersection :: a -> b -> c
+    xor :: a -> b -> c
 
