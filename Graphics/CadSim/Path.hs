@@ -39,6 +39,11 @@ instance Moveable Point Point Point where
     scale     (Point sx sy) (Point x y) = Point (x*sx) (y*sy)
     rotate _ path = undefined
 
+instance Moveable Double Point Point where
+    translate t (Point x y) = Point (x+t) (y+t)
+    scale     s (Point x y) = Point (x*s) (y*s)
+    rotate _ path = undefined
+
 instance Moveable Point Extents Extents where
     translate t (p1, p2) = (translate t p1, translate t p2)
     scale     s (p1, p2) = (scale s p1, scale s p2)
@@ -51,7 +56,7 @@ instance Num Point where
     a + b = a `translate` b
     a * b = a `scale` b
     a - b = a `translate` (negate b)
-    negate a = (toPoint ((-1) :: Double) `scale` a)
+    negate a = (((-1) :: Double) `scale` a)
     abs (Point x y) = Point (abs x) (abs y)
     signum (Point x y) = Point (signum x) (signum y)
     fromInteger = toPoint
@@ -136,7 +141,7 @@ instance Convertible Point C.IntPoint where
 instance (Path a) => Convertible a (Double, C.Polygon) where
     safeConvert path = Right $ (sFactor, C.Polygon pts)
         where path' :: Face
-              path' = (toPoint sFactor) `scale` path
+              path' = sFactor `scale` path
               pts = map convert $ getExterior path'
               sFactor = getScaleFactor path
 
@@ -144,7 +149,7 @@ instance Convertible (Double, C.Polygon) Face where
     safeConvert (sFactor, C.Polygon pts) = Right $ Face exterior []
         where exterior = map (sc . convert) pts
               sc :: Point -> Point
-              sc = scale (toPoint $ 1/sFactor)
+              sc = scale (1/sFactor)
 
 instance (Path a) => Convertible a (Double, C.Polygons) where
     safeConvert path = Right $ (sFactor, convertByScale sFactor path)
@@ -153,7 +158,7 @@ instance (Path a) => Convertible a (Double, C.Polygons) where
 convertByScale :: (Path a) => Double -> a -> C.Polygons
 convertByScale sFactor path = C.Polygons (exterior:holes)
         where path' :: Face
-              path' = (toPoint sFactor) `scale` path
+              path' = sFactor `scale` path
               exterior = C.Polygon $ map convert $ getExterior path'
               holes = map (C.Polygon . map convert) $ getHoles path'
 
@@ -177,6 +182,15 @@ instance Convertible C.Polygons Face where
 
 --------- Path Instance for Moveable and Boolean -------
 instance (Path a) => Moveable Point a Face where
+    translate tp path = Face exterior holes
+        where exterior = map (translate tp) $ getExterior path
+              holes = map (map (translate tp)) $ getHoles path
+    scale sp path = Face exterior holes
+        where exterior = map (scale sp) $ getExterior path
+              holes = map (map (scale sp)) $ getHoles path
+    rotate _ path = undefined
+
+instance (Path a) => Moveable Double a Face where
     translate tp path = Face exterior holes
         where exterior = map (translate tp) $ getExterior path
               holes = map (map (translate tp)) $ getHoles path

@@ -164,8 +164,6 @@ render_ p = do
          size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
          extents@(p1, p2) = getExtents p
          extents' = (toPoint (-size) + p1, toPoint size + p2)
-     print size
-     print extents'
      GLFW.setWindowSizeCallback (resizeScene extents')
      -- register the function called when the keyboard is pressed.
      GLFW.setKeyCallback keyPressed
