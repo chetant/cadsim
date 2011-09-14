@@ -5,6 +5,12 @@ import Graphics.CadSim.Path
 import Graphics.CadSim.Path.Render
 import Graphics.CadSim.Boolean
 
+testb = do
+  moveTo (0,0)
+  right 1
+  move ((-0.5), 2)
+  close
+
 main = do
   let a :: [(Double,Double)]
       a = [(0,0)
@@ -17,5 +23,6 @@ main = do
           ,(1,0)
           ,(0.5,2)
           ]
-  let soln = b `intersection` a
-  render soln
+      b' = getPath testb
+  let soln = b' `intersection` a
+  render b'

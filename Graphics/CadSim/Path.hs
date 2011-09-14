@@ -9,6 +9,7 @@ module Graphics.CadSim.Path
 ,Face(..)
 ,Path(..)
 ,getScaleFactor
+,getPath, up, down, left, right, close, move, moveTo
 ) where
 
 import GHC.Float(float2Double)
@@ -16,6 +17,7 @@ import Data.List(foldl')
 import Data.Convertible
 import Data.Word
 import Data.Bits
+import Control.Monad.State
 import System.IO.Unsafe(unsafePerformIO)
 
 import qualified Algebra.Clipper as C
@@ -27,6 +29,9 @@ data Point = Point {
       pointX :: Double
     , pointY :: Double
     } deriving Eq
+
+instance (Real a, Real b) => Convertible (a, b) Point where
+    safeConvert (x, y) = Right $ Point (realToFrac x) (realToFrac y)
 
 type Points = [Point]
 type Extents = (Point, Point)
@@ -77,17 +82,17 @@ distY (Point _ y1) (Point _ y2) = y2 - y1
 instance Convertible Double Double where
     safeConvert = Right
 
-toPoint :: (Convertible n Double) => n -> Point
+toPoint :: (Real n) => n -> Point
 toPoint n = Point n' n'
-    where n' = convert n
+    where n' = realToFrac n
 
-toPointX :: (Convertible n Double) => n -> Point
+toPointX :: (Real n) => n -> Point
 toPointX n = Point n' 0
-    where n' = convert n
+    where n' = realToFrac n
 
-toPointY :: (Convertible n Double) => n -> Point
+toPointY :: (Real n) => n -> Point
 toPointY n = Point 0  n'
-    where n' = convert n
+    where n' = realToFrac n
 
 class Path a where
     getExterior :: a -> Points
@@ -111,6 +116,84 @@ data Face = Face {
     }
 
 mapTuple f = map (\(x,y) -> Point (f x) (f y))
+
+--------- Monad for Path building -------
+data PBuilder = PBuilder {
+      currPointer :: Point
+    , currPath :: Points
+    , addCurrPath :: Points -> Face -> Face
+    , builderFace :: Face
+    }
+
+type PathBuild a = State PBuilder a
+
+setExterior_ ps face = face { exterior = ps }
+
+-- |Execute the monad and get the Face (Path instance)
+getPath :: PathBuild a -> Face
+getPath m = builderFace $ execState m initState
+    where initState = PBuilder (Point 0 0) [] setExterior_ (Face [] [])
+
+-- |Select the exterior to work on
+onExterior :: PathBuild ()
+onExterior = modify (\(PBuilder xy p _ f) -> PBuilder xy p setExterior_ f)
+
+-- |Select the hole to work on
+onHole :: PathBuild ()
+onHole = modify (\(PBuilder xy p _ f) -> PBuilder xy p setHole f)
+    where setHole ps face = face { holes = (ps:holes face) }
+
+-- |Moves pointer to location
+moveTo :: (Convertible a Point) => a -> PathBuild ()
+moveTo xy = modify (\pb -> pb { currPointer = convert xy })
+
+-- |Moves pointer to relative location, drawing a line
+move :: (Convertible a Point) => a -> PathBuild ()
+move xy = modify (\pb -> let cp = currPointer pb
+                             xy' = convert xy + cp
+                             path = currPath pb
+                         in
+                         pb { currPointer = xy'
+                            , currPath = cp : path})
+
+-- |Moves pointer left, drawing a line
+left :: (Real a) => a -> PathBuild ()
+left x = modify (\pb -> let xy = currPointer pb
+                            xy' = toPointX (-x) + xy
+                        in
+                        pb { currPointer = xy'
+                           , currPath = xy : currPath pb})
+
+-- |Moves pointer right, drawing a line
+right :: (Real a) => a -> PathBuild ()
+right x = modify (\pb -> let xy = currPointer pb
+                             xy' = toPointX x + xy
+                         in
+                         pb { currPointer = xy'
+                            , currPath = xy : currPath pb})
+
+-- |Moves pointer up, drawing a line
+up :: (Real a) => a -> PathBuild ()
+up y = modify (\pb -> let xy = currPointer pb
+                          xy' = toPointY y + xy 
+                      in
+                      pb { currPointer = xy'
+                         , currPath = xy : currPath pb})
+
+-- |Moves pointer down, drawing a line
+down :: (Real a) => a -> PathBuild ()
+down y = modify (\pb -> let xy = currPointer pb 
+                            xy' = toPointY (-y) + xy
+                        in
+                        pb { currPointer = xy'
+                           , currPath = xy' : currPath pb})
+
+-- |Close the current path, start a new one
+close :: PathBuild()
+close = modify (\pb -> let face = builderFace pb
+                           addPath = addCurrPath pb
+                           ps = currPath pb
+                       in  pb { currPath = [], builderFace = addPath ps face })
 
 --------- Instances for Path -------
 instance Convertible a Double => Path [(a, a)] where
@@ -217,7 +300,7 @@ doubleConvert a b = if sFa > sFb
     where sFa = getScaleFactor a
           sFb = getScaleFactor b
 
-instance (Path a) => BooleanOps a a Face where
+instance (Path a, Path b) => BooleanOps a b Face where
     union a b = 
         case doubleConvert a b of
           (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.union` b')
