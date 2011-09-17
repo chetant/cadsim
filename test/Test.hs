@@ -3,6 +3,7 @@ module Main where
 import Graphics.CadSim.Render
 import Graphics.CadSim.Path
 import Graphics.CadSim.Path.Render
+import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
 
 testb = do
@@ -25,4 +26,4 @@ main = do
           ]
       b' = getPath testb
   let soln = b' `intersection` a
-  render b'
+  render soln
