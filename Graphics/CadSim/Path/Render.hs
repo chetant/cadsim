@@ -6,8 +6,8 @@ render_
 
 import qualified Graphics.UI.GLFW as GLFW
 -- everything from here starts with gl or GL
-import Graphics.Rendering.OpenGL.Raw
-import Graphics.Rendering.GLU.Raw(gluOrtho2D)
+import Graphics.Rendering.OpenGL hiding(Point, translate)
+import qualified Graphics.Rendering.OpenGL as GL
 import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
 import Control.Monad(when, forever)
@@ -21,16 +21,15 @@ instance (Path a) => Renderable a where
 
 initGL :: IO ()
 initGL = do
-  glShadeModel gl_SMOOTH -- enables smooth color shading
-  glClearColor 0 0 0 0 -- Clear the background color to black
-  glClearDepth 1 -- enables clearing of the depth buffer
-  glEnable gl_DEPTH_TEST
-  glDepthFunc gl_LEQUAL  -- type of depth test
-  glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-  glEnable gl_LINE_SMOOTH
-  glHint gl_LINE_SMOOTH_HINT gl_NICEST
-  glEnable gl_BLEND
-  glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
+  shadeModel $= Smooth -- enables smooth color shading
+  clearColor $= Color4 0 0 0 0 -- Clear the background color to black
+  clearDepth $= 1 -- enables clearing of the depth buffer
+  depthFunc $= Just Lequal
+  hint PerspectiveCorrection $= Nicest
+  lineSmooth $= Enabled
+  hint LineSmooth $= Nicest
+  blend $= Enabled
+  blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
 resizeScene :: (Point, Point) -> GLFW.WindowSizeCallback
 resizeScene ps w     0      = resizeScene ps w 1 -- prevent divide by zero
@@ -42,40 +41,13 @@ resizeScene e@(minPt, maxPt) width height = do
       aScr = fromIntegral width / fromIntegral height
       aPth = if dy == 0 then dx else (dx / dy)
       (hw, hh) = if aPth > aScr then (hdx, hdx / aScr) else (hdy*aScr, hdy)
-  glViewport 0 0 (fromIntegral width) (fromIntegral height)
-  glMatrixMode gl_PROJECTION
-  glLoadIdentity
-  gluOrtho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
-  glMatrixMode gl_MODELVIEW
-  glLoadIdentity
-  glFlush
-
-drawScene :: IO ()
-drawScene = do
-  -- clear the screen and the depth bufer
-  glClear $ fromIntegral  $  gl_COLOR_BUFFER_BIT
-                         .|. gl_DEPTH_BUFFER_BIT
-  glLoadIdentity -- reset view
-
-  glTranslatef 0 0 (-0.5) --Move left 1.5 Units and into the screen 6.0
-  
-  -- draw a triangle
-  glBegin gl_TRIANGLES
-  glVertex3f 0      1  0 -- top
-  glVertex3f 1    (-1) 0 -- bottom right
-  glVertex3f (-1) (-1) 0 -- bottom left
-  glEnd
-
-  glTranslatef 3 0 0  -- move right three units
-
-  glBegin gl_QUADS
-  glVertex3f (-1)   1  0 -- top left
-  glVertex3f   1    1  0 -- top right
-  glVertex3f   1  (-1) 0 -- bottom right
-  glVertex3f (-1) (-1) 0 -- bottom left
-  glEnd
-  
-  glFlush
+  viewport $= ((Position 0 0), (Size (fromIntegral width) (fromIntegral height)))
+  matrixMode $= Projection
+  loadIdentity
+  ortho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
+  matrixMode $= (Modelview 0)
+  loadIdentity
+  flush
 
 maxNonInfiniteFloat :: RealFloat a => a -> a
 maxNonInfiniteFloat a = encodeFloat m n where
@@ -87,39 +59,40 @@ maxNonInfiniteFloat a = encodeFloat m n where
 
 drawOrigin = do
   let max = 1000000 -- maxNonInfiniteFloat undefined
-  glLineStipple 1 0x00FF
-  glEnable gl_LINE_STIPPLE
-  glLineWidth 0.5
-  glBegin gl_LINES
-  -- x axis
-  glVertex3f (-max) 0 0
-  glVertex3f max 0 0
-  -- y axis
-  glVertex3f 0 (-max) 0
-  glVertex3f 0 max 0
-  glEnd
-  glDisable gl_LINE_STIPPLE
-  glLineWidth 1
+  lineStipple $= Just (1, 0x00FF)
+  lineWidth $= 0.5
+  renderPrimitive Lines $ do
+               -- x axis
+               vertex $ vert (-max) 0 0
+               vertex $ vert max 0 0
+               -- y axis
+               vertex $ vert 0 (-max) 0
+               vertex $ vert 0 max 0
+  lineStipple $= Nothing
+  lineWidth $= 1
+
+point :: (Real a) => a -> a -> a -> Vector3 GLdouble
+point x y z = Vector3 (realToFrac x) (realToFrac y) (realToFrac z)
+
+vert :: (Real a) => a -> a -> a -> Vertex3 GLdouble
+vert x y z = Vertex3 (realToFrac x) (realToFrac y) (realToFrac z)
 
 drawPath :: Path a => Bool -> a -> IO ()
 drawPath drawOriginAxes path = do
   -- clear the screen and the depth bufer
-  glClear $ fromIntegral  $  gl_COLOR_BUFFER_BIT
-                         .|. gl_DEPTH_BUFFER_BIT
-  glLoadIdentity
-  glTranslatef 0 0 (-0.5)
+  clear [ColorBuffer, DepthBuffer]
+  loadIdentity
+  GL.translate $ point 0 0 (-0.5)
 
   when drawOriginAxes drawOrigin
 
-  glLineWidth 2
-  let drawPath_ ps = do
-          glBegin gl_LINE_LOOP
-          mapM_ (\(Point x y) -> glVertex3f (realToFrac x) (realToFrac y) 0) ps
-          glEnd
+  lineWidth $= 2
+  let drawPath_ ps = renderPrimitive LineLoop $ do
+          mapM_ (\(Point x y) -> vertex (vert x y 0)) ps
   drawPath_ $ getExterior path
   mapM_ drawPath_ $ getHoles path
-  glLineWidth 1
-  glFlush
+  lineWidth $= 1
+  flush
 
 shutdown :: GLFW.WindowCloseCallback
 shutdown = do
@@ -152,13 +125,14 @@ render_ p = do
                      , GLFW.displayOptions_numDepthBits = 1
                      -- , GLFW.displayOptions_displayMode = GLFW.Fullscreen
                      }
+         renderFunc = drawPath True p
      -- open a window
      True <- GLFW.openWindow dspOpts
      -- window starts at upper left corner of the screen
      GLFW.setWindowPosition 0 0
      GLFW.setWindowTitle "CadSim"
      -- register the function to do all our OpenGL drawing
-     GLFW.setWindowRefreshCallback drawScene
+     GLFW.setWindowRefreshCallback renderFunc
      -- register the function called when our window is resized
      let scaleFactor = 0.1
          size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
@@ -172,5 +146,5 @@ render_ p = do
      initGL
      -- start event processing engine
      forever $ do
-       drawPath True p
+       renderFunc
        GLFW.swapBuffers

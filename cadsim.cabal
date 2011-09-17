@@ -63,8 +63,7 @@ Library
   Build-depends:       base        >= 4 && < 5
                       ,mtl         >= 2 && < 3
                       ,clipper
-                      ,GLURaw      >= 1 && < 2
-                      ,OpenGLRaw   >= 1 && < 2
+                      ,OpenGL      >= 2.4 && < 3
                       ,GLFW-b      <  1
                       ,convertible > 1
   

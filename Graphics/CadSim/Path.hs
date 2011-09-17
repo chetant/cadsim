@@ -9,7 +9,6 @@ module Graphics.CadSim.Path
 ,Face(..)
 ,Path(..)
 ,getScaleFactor
-,toPointX, toPointY
 ) where
 
 import GHC.Float(float2Double)
