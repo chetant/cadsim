@@ -46,7 +46,6 @@ Extra-source-files:  README
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.2
 
-
 Library
   -- Modules exported by the library.
   Exposed-modules:     Graphics.CadSim
@@ -59,13 +58,16 @@ Library
                       ,Graphics.CadSim.Path.Render
                       ,Graphics.CadSim.Path.Monad
   
+                      ,Graphics.CadSim.Solid
+
   -- Packages needed in order to build this package.
   Build-depends:       base        >= 4 && < 5
                       ,mtl         >= 2 && < 3
-                      ,clipper
+                      ,clipper     <  1
                       ,OpenGL      >= 2.4 && < 3
                       ,GLFW-b      <  1
-                      ,convertible > 1
+                      ,convertible >  1
+                      ,vector      >= 0.9 && < 1
   
   --Other-modules:       Graphics.CadSim.Render
   
