@@ -9,6 +9,8 @@ module Graphics.CadSim.Path
 ,Face(..)
 ,Path(..)
 ,getScaleFactor
+,rectangle
+,square
 ) where
 
 import GHC.Float(float2Double)
@@ -230,3 +232,17 @@ instance (Path a, Path b) => BooleanOps a b Face where
     xor a b = 
         case doubleConvert a b of
           (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.xor` b')
+
+
+---- basic primitives
+square :: Double -> Face
+square side = rectangle side side
+
+rectangle :: Double -> Double -> Face
+rectangle width height = Face [p1, p2, p3, p4] []
+    where hWidth = width / 2
+          hHeight = height / 2
+          p1 = Point (-hWidth) (-hHeight)
+          p2 = Point (hWidth) (-hHeight)
+          p3 = Point (hWidth) (hHeight)
+          p4 = Point (-hWidth) (hHeight)

@@ -7,12 +7,24 @@ module Graphics.CadSim.Solid
 ,Points(..)
 ,Extents(..), getCenter
 ,Solid(..)
--- ,Object(..)
+,Object(..)
+,tesselate
 ) where
 
 import Data.List(foldl')
+import Control.Monad(foldM)
+import Data.Maybe(fromJust)
+import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.Convertible
+import Data.Tensor(Vertex3(..))
+import Graphics.Rendering.OpenGL.Raw.Core31(GLdouble)
+import Graphics.Rendering.OpenGL.GL.VertexSpec(Normal3(..))
+import Graphics.Rendering.OpenGL.GLU.Tessellation
+import qualified Bindings.Gts as Gts
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
+import Foreign.Ptr(Ptr, nullPtr)
 
 import Graphics.CadSim.Move
 import Graphics.CadSim.Boolean
@@ -108,9 +120,12 @@ class Solid a where
                   | otherwise = (head firstPoint, head firstPoint)
 
 data Object = Object { 
-      objPoints :: V.Vector (Double, Double, Double)
-    , objIndices :: V.Vector Int
-    }
+      objPoints :: V.Vector (Double, Double, Double) -- Points with (x, y, z)
+    , objEdges :: V.Vector (Int, Int) -- Edges indexing points (a to b)
+    , objTris :: V.Vector (Int, Int, Int) -- Triangles indexing edges (a, b, c)
+    } deriving (Show)
+
+type GtsSurface = Ptr Gts.C'GtsSurface
 
 newtype Radians = Radians Double
 
@@ -121,5 +136,64 @@ radians :: Double -> Radians
 radians = Radians
 
 sweep :: (Path.Path a) => a -> Radians -> Object
-sweep = 
+sweep = undefined
 
+newtype Length = Length Double
+
+extrude :: (Path.Path a) => a -> Length -> Object
+extrude = undefined
+
+data Edge = Edge Int Int deriving (Show, Eq, Ord)
+mkEdge from to
+    | from < to = Edge to from
+    | otherwise = Edge from to
+-- instance Eq Edge where
+--     (Edge x1 y1) == (Edge x2 y2) = ((x1 == x2 && y1 == y2) || (x1 == y2 && y1 == x2))
+-- instance Ord Edge where
+--     compare e1@(Edge x1 y1) e2@(Edge x2 y2) = if e1 == e2 
+--                                               then EQ 
+--                                               else (if (x2 - x1) > 0 then GT else LT)
+toTuple (Edge x y) = (x, y)
+
+tesselate :: (Path.Path a) => a -> IO Object
+tesselate path = do
+  let pt2Vtx (Path.Point x y) = AnnotatedVertex (Vertex3 (realToFrac x) (realToFrac y) 0) 0
+      pts2Contour = ComplexContour . map pt2Vtx
+      exterior = pts2Contour $ Path.getExterior path
+      holes = map pts2Contour $ Path.getHoles path
+      normal :: Normal3 GLdouble
+      normal = Normal3 0 0 1
+      combine :: Combiner Int
+      combine _ _ = 0
+      cpoly = ComplexPolygon (exterior:holes)
+      vtx2Pt (AnnotatedVertex (Vertex3 x y z) _) = (realToFrac x, realToFrac y, realToFrac z)
+      getPtsFromTri (Triangle v1 v2 v3) = [vtx2Pt v1, vtx2Pt v2, vtx2Pt v3]
+      getAllPts ts = concatMap getPtsFromTri ts
+  (Triangulation tris) <- triangulate TessWindingOdd 1E-6 normal combine cpoly
+  let pts = getAllPts tris
+      points = Set.toList . Set.fromList $ pts
+      ptMap = Map.fromList $ zip points [0..]
+      getIdx v = fromJust $ Map.lookup v ptMap
+      getEdges es [] = es
+      getEdges es (v1:v2:v3:vs) = let v1' = getIdx v1
+                                      v2' = getIdx v2
+                                      v3' = getIdx v3
+                                      e1 = mkEdge v1' v2'
+                                      e2 = mkEdge v2' v3'
+                                      e3 = mkEdge v3' v1'
+                                  in getEdges (e1:e2:e3:es) vs
+      edges = Set.toList . Set.fromList $ getEdges [] pts
+      eMap = Map.fromList $ zip edges [0..]
+      getEIdx e = maybe (-1) id $ Map.lookup e eMap
+      getTris ts [] = ts
+      getTris ts (v1:v2:v3:vs) = let v1' = getIdx v1
+                                     v2' = getIdx v2
+                                     v3' = getIdx v3
+                                     e1 = getEIdx (mkEdge v1' v2')
+                                     e2 = getEIdx (mkEdge v2' v3')
+                                     e3 = getEIdx (mkEdge v3' v1')
+                                     t = (e1, e2, e3)
+                                 in getTris (t:ts) vs
+      triangles = getTris [] pts
+  return $ Object (V.fromList points) (V.fromList . map toTuple $ edges) (V.fromList triangles)
+  

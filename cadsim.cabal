@@ -59,15 +59,21 @@ Library
                       ,Graphics.CadSim.Path.Monad
   
                       ,Graphics.CadSim.Solid
+                      ,Graphics.CadSim.Solid.Render
+                      ,Graphics.CadSim.Solid.Gts
 
   -- Packages needed in order to build this package.
-  Build-depends:       base        >= 4 && < 5
-                      ,mtl         >= 2 && < 3
-                      ,clipper     <  1
-                      ,OpenGL      >= 2.4 && < 3
-                      ,GLFW-b      <  1
-                      ,convertible >  1
-                      ,vector      >= 0.9 && < 1
+  Build-depends:       base         >= 4   && < 5
+                      ,mtl          >= 2   && < 3
+                      ,containers   >= 0.4 && < 1
+                      ,clipper      <  1
+                      ,Tensor       >= 1   && < 2
+                      ,OpenGL       >= 2.4 && < 3
+                      ,OpenGLRaw    >= 1   && < 2
+                      ,GLFW-b       <  1
+                      ,convertible  >  1
+                      ,vector       >= 0.9 && < 1
+                      ,bindings-gts >= 0.1 && < 1
   
   --Other-modules:       Graphics.CadSim.Render
   

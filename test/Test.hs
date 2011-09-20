@@ -5,6 +5,8 @@ import Graphics.CadSim.Path
 import Graphics.CadSim.Path.Render
 import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
+import Graphics.CadSim.Move
+import Graphics.CadSim.Solid(tesselate)
 
 testb = do
   moveTo (0,0)
@@ -26,4 +28,12 @@ main = do
           ]
       b' = getPath testb
   let soln = b' `intersection` a
-  render soln
+      r1 = rectangle 20 10
+      r2 :: Face
+      r2 = toPointX 7.5 `translate` square 5
+      r3 :: Face
+      r3 = toPointX (-7.5) `translate` square 5
+      s2 = (r1 `xor` r2) `xor` r3
+  obj <- tesselate soln
+  print obj
+  render s2
