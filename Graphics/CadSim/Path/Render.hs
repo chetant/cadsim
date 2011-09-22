@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances #-}
 module Graphics.CadSim.Path.Render
 (
-render_
 ) where
 
 import qualified Graphics.UI.GLFW as GLFW

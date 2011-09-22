@@ -21,10 +21,8 @@ import Data.Tensor(Vertex3(..))
 import Graphics.Rendering.OpenGL.Raw.Core31(GLdouble)
 import Graphics.Rendering.OpenGL.GL.VertexSpec(Normal3(..))
 import Graphics.Rendering.OpenGL.GLU.Tessellation
-import qualified Bindings.Gts as Gts
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
-import Foreign.Ptr(Ptr, nullPtr)
 
 import Graphics.CadSim.Move
 import Graphics.CadSim.Boolean
@@ -107,10 +105,11 @@ toPointZ n = Point 0  0  n'
     where n' = realToFrac n
 
 class Solid a where
-    getExterior :: a -> Points
+    getVertices :: a -> Points
+    getTris :: a -> [(Point, Point, Point)]
     getExtents :: a -> (Point, Point)
     getExtents path = foldl' minMaxPt initPt points
-        where points = getExterior path
+        where points = getVertices path
               minMaxPt (Point minX minY minZ, Point maxX maxY maxZ) (Point x y z) = 
                   (Point (min minX x) (min minY y) (min minZ z)
                   ,Point (max maxX x) (max maxY y) (max maxZ z))
@@ -125,7 +124,16 @@ data Object = Object {
     , objTris :: V.Vector (Int, Int, Int) -- Triangles indexing edges (a, b, c)
     } deriving (Show)
 
-type GtsSurface = Ptr Gts.C'GtsSurface
+fromTuple (x, y, z) = Point x y z
+
+instance Solid Object where
+    getVertices = map fromTuple . V.toList . objPoints
+    getTris obj = map mkTri $ V.toList $ objTris obj
+        where vs = objPoints obj
+              es = objEdges obj
+              mkTri (iv1, iv2, iv3) = (fromTuple $ vs V.! (es V.! iv1), 
+                                       fromTuple $ vs V.! (es V.! iv2), 
+                                       fromTuple $ vs V.! (es V.! iv3))
 
 newtype Radians = Radians Double
 
@@ -153,7 +161,7 @@ mkEdge from to
 --     compare e1@(Edge x1 y1) e2@(Edge x2 y2) = if e1 == e2 
 --                                               then EQ 
 --                                               else (if (x2 - x1) > 0 then GT else LT)
-toTuple (Edge x y) = (x, y)
+edge2Tuple (Edge x y) = (x, y)
 
 tesselate :: (Path.Path a) => a -> IO Object
 tesselate path = do
@@ -195,5 +203,4 @@ tesselate path = do
                                      t = (e1, e2, e3)
                                  in getTris (t:ts) vs
       triangles = getTris [] pts
-  return $ Object (V.fromList points) (V.fromList . map toTuple $ edges) (V.fromList triangles)
-  
+  return $ Object (V.fromList points) (V.fromList . map edge2Tuple $ edges) (V.fromList triangles)

@@ -7,6 +7,7 @@ import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
 import Graphics.CadSim.Move
 import Graphics.CadSim.Solid(tesselate)
+import Graphics.CadSim.Solid.Render
 
 testb = do
   moveTo (0,0)
@@ -36,4 +37,5 @@ main = do
       s2 = (r1 `xor` r2) `xor` r3
   obj <- tesselate soln
   print obj
-  render s2
+  render_ obj
+  -- render s2

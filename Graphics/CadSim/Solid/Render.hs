@@ -34,21 +34,20 @@ resizeScene :: (Point, Point) -> GLFW.WindowSizeCallback
 resizeScene ps w     0      = resizeScene ps w 1 -- prevent divide by zero
 resizeScene e@(minPt, maxPt) width height = do
   return ()
-  -- TODO: Fix this
-  -- let Point dx dy = maxPt - minPt
-  --     Point cx cy = getCenter e
-  --     hdx = dx / 2
-  --     hdy = dy / 2
-  --     aScr = fromIntegral width / fromIntegral height
-  --     aPth = if dy == 0 then dx else (dx / dy)
-  --     (hw, hh) = if aPth > aScr then (hdx, hdx / aScr) else (hdy*aScr, hdy)
-  -- viewport $= ((Position 0 0), (Size (fromIntegral width) (fromIntegral height)))
-  -- matrixMode $= Projection
-  -- loadIdentity
-  -- ortho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
-  -- matrixMode $= (Modelview 0)
-  -- loadIdentity
-  -- flush
+  let Point dx dy _ = maxPt - minPt
+      Point cx cy _ = getCenter e
+      hdx = dx / 2
+      hdy = dy / 2
+      aScr = fromIntegral width / fromIntegral height
+      aPth = if dy == 0 then dx else (dx / dy)
+      (hw, hh) = if aPth > aScr then (hdx, hdx / aScr) else (hdy*aScr, hdy)
+  viewport $= ((Position 0 0), (Size (fromIntegral width) (fromIntegral height)))
+  matrixMode $= Projection
+  loadIdentity
+  ortho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
+  matrixMode $= (Modelview 0)
+  loadIdentity
+  flush
 
 maxNonInfiniteFloat :: RealFloat a => a -> a
 maxNonInfiniteFloat a = encodeFloat m n where
@@ -87,13 +86,10 @@ drawObj drawOriginAxes obj = do
 
   when drawOriginAxes drawOrigin
 
-  -- TODO: Finish this
-  -- lineWidth $= 2
-  -- let drawPath_ ps = renderPrimitive LineLoop $ do
-  --         mapM_ (\(Point x y) -> vertex (vert x y 0)) ps
-  -- drawPath_ $ getExterior path
-  -- mapM_ drawPath_ $ getHoles path
-  -- lineWidth $= 1
+  lineWidth $= 2
+  let mkVert (Point x y z) = vertex (vert x y z)
+  renderPrimitive Triangles $ mapM_ (\(v1, v2, v3) -> mkVert v1 >> mkVert v2 >> mkVert v3) $ getTris obj
+  lineWidth $= 1
   flush
 
 shutdown :: GLFW.WindowCloseCallback
@@ -136,12 +132,11 @@ render_ o = do
      -- register the function to do all our OpenGL drawing
      GLFW.setWindowRefreshCallback renderFunc
      -- register the function called when our window is resized
-     -- TODO: Make Solid instance for Object
-     -- let scaleFactor = 0.1
-     --     size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
-     --     extents@(p1, p2) = getExtents o
-     --     extents' = (toPoint (-size) + p1, toPoint size + p2)
-     -- GLFW.setWindowSizeCallback (resizeScene extents')
+     let scaleFactor = 0.1
+         size = scaleFactor * (max (uncurry distX extents) (uncurry distY extents))
+         extents@(p1, p2) = getExtents o
+         extents' = (toPoint (-size) + p1, toPoint size + p2)
+     GLFW.setWindowSizeCallback (resizeScene extents')
      -- register the function called when the keyboard is pressed.
      GLFW.setKeyCallback keyPressed
      GLFW.setWindowCloseCallback shutdown
