@@ -6,7 +6,7 @@ import Graphics.CadSim.Path.Render
 import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
 import Graphics.CadSim.Move
-import Graphics.CadSim.Solid(tesselate)
+import Graphics.CadSim.Solid(extrude)
 import Graphics.CadSim.Solid.Render
 
 testb = do
@@ -35,7 +35,7 @@ main = do
       r3 :: Face
       r3 = toPointX (-7.5) `translate` square 5
       s2 = (r1 `xor` r2) `xor` r3
-  obj <- tesselate soln
-  print obj
-  render_ obj
+      obj = extrude soln 5
+  -- print obj
+  render $ obj
   -- render s2

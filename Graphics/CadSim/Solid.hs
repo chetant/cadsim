@@ -8,11 +8,12 @@ module Graphics.CadSim.Solid
 ,Extents(..), getCenter
 ,Solid(..)
 ,Object(..)
-,tesselate
+,join, extrude, sweep
 ) where
 
 import Data.List(foldl')
 import Control.Monad(foldM)
+import System.IO.Unsafe(unsafePerformIO)
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -120,22 +121,37 @@ class Solid a where
 
 data Object = Object { 
       objPoints :: V.Vector (Double, Double, Double) -- Points with (x, y, z)
-    , objEdges :: V.Vector (Int, Int) -- Edges indexing points (a to b)
     , objTris :: V.Vector (Int, Int, Int) -- Triangles indexing edges (a, b, c)
     } deriving (Show)
 
 fromTuple (x, y, z) = Point x y z
+toTuple (Point x y z) = (x, y, z)
+
+instance Moveable Point Object Object where
+    translate pt obj = obj { objPoints = V.map (toTuple . translate pt . fromTuple) (objPoints obj) }
+    scale     pt obj = obj { objPoints = V.map (toTuple . scale pt . fromTuple)     (objPoints obj) }
+    rotate _ obj = undefined
+
+instance Moveable Double Object Object where
+    translate t obj = obj { objPoints = V.map (toTuple . translate t . fromTuple) (objPoints obj) }
+    scale     s obj = obj { objPoints = V.map (toTuple . scale s . fromTuple)     (objPoints obj) }
+    rotate _ obj = undefined
 
 instance Solid Object where
     getVertices = map fromTuple . V.toList . objPoints
     getTris obj = map mkTri $ V.toList $ objTris obj
         where vs = objPoints obj
-              es = objEdges obj
-              mkTri (iv1, iv2, iv3) = (fromTuple $ vs V.! (es V.! iv1), 
-                                       fromTuple $ vs V.! (es V.! iv2), 
-                                       fromTuple $ vs V.! (es V.! iv3))
+              mkTri (iv1, iv2, iv3) = (fromTuple $ vs V.! iv1, 
+                                       fromTuple $ vs V.! iv2, 
+                                       fromTuple $ vs V.! iv3)
 
 newtype Radians = Radians Double
+
+join :: Object -> Object -> Object
+join o1 o2 = Object vs tris
+    where numvs = V.length $ objPoints o1
+          vs = objPoints o1 V.++ objPoints o2
+          tris = objTris o1 V.++ (V.map (\(v1, v2, v3) -> (v1+numvs,v2+numvs,v3+numvs)) $ objTris o2)
 
 degrees :: Real a => a -> Radians
 degrees deg = Radians $ (realToFrac deg * pi) / 360.0
@@ -146,22 +162,12 @@ radians = Radians
 sweep :: (Path.Path a) => a -> Radians -> Object
 sweep = undefined
 
-newtype Length = Length Double
-
-extrude :: (Path.Path a) => a -> Length -> Object
-extrude = undefined
-
-data Edge = Edge Int Int deriving (Show, Eq, Ord)
-mkEdge from to
-    | from < to = Edge to from
-    | otherwise = Edge from to
--- instance Eq Edge where
---     (Edge x1 y1) == (Edge x2 y2) = ((x1 == x2 && y1 == y2) || (x1 == y2 && y1 == x2))
--- instance Ord Edge where
---     compare e1@(Edge x1 y1) e2@(Edge x2 y2) = if e1 == e2 
---                                               then EQ 
---                                               else (if (x2 - x1) > 0 then GT else LT)
-edge2Tuple (Edge x y) = (x, y)
+extrude :: (Path.Path a) => a -> Double -> Object
+extrude path len = s1 `join` s2
+  where s1 = unsafePerformIO $ tesselate path
+        s2 :: Object
+        s2 = toPointZ len `translate` s1
+        numvs = V.length $ objPoints s1
 
 tesselate :: (Path.Path a) => a -> IO Object
 tesselate path = do
@@ -182,25 +188,11 @@ tesselate path = do
       points = Set.toList . Set.fromList $ pts
       ptMap = Map.fromList $ zip points [0..]
       getIdx v = fromJust $ Map.lookup v ptMap
-      getEdges es [] = es
-      getEdges es (v1:v2:v3:vs) = let v1' = getIdx v1
-                                      v2' = getIdx v2
-                                      v3' = getIdx v3
-                                      e1 = mkEdge v1' v2'
-                                      e2 = mkEdge v2' v3'
-                                      e3 = mkEdge v3' v1'
-                                  in getEdges (e1:e2:e3:es) vs
-      edges = Set.toList . Set.fromList $ getEdges [] pts
-      eMap = Map.fromList $ zip edges [0..]
-      getEIdx e = maybe (-1) id $ Map.lookup e eMap
       getTris ts [] = ts
       getTris ts (v1:v2:v3:vs) = let v1' = getIdx v1
                                      v2' = getIdx v2
                                      v3' = getIdx v3
-                                     e1 = getEIdx (mkEdge v1' v2')
-                                     e2 = getEIdx (mkEdge v2' v3')
-                                     e3 = getEIdx (mkEdge v3' v1')
-                                     t = (e1, e2, e3)
+                                     t = (v1', v2', v3')
                                  in getTris (t:ts) vs
       triangles = getTris [] pts
-  return $ Object (V.fromList points) (V.fromList . map edge2Tuple $ edges) (V.fromList triangles)
+  return $ Object (V.fromList points) (V.fromList triangles)

@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances #-}
 module Graphics.CadSim.Solid.Render
 (
-render_
 ) where
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -87,6 +86,7 @@ drawObj drawOriginAxes obj = do
   when drawOriginAxes drawOrigin
 
   lineWidth $= 2
+  polygonMode $= (Line, Line)
   let mkVert (Point x y z) = vertex (vert x y z)
   renderPrimitive Triangles $ mapM_ (\(v1, v2, v3) -> mkVert v1 >> mkVert v2 >> mkVert v3) $ getTris obj
   lineWidth $= 1

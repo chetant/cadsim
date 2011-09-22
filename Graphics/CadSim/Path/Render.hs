@@ -5,7 +5,7 @@ module Graphics.CadSim.Path.Render
 
 import qualified Graphics.UI.GLFW as GLFW
 -- everything from here starts with gl or GL
-import Graphics.Rendering.OpenGL hiding(Point, translate)
+import Graphics.Rendering.OpenGL hiding(Face, Point, translate)
 import qualified Graphics.Rendering.OpenGL as GL
 import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
@@ -15,7 +15,7 @@ import Graphics.CadSim.Path
 import Graphics.CadSim.Move
 import Graphics.CadSim.Render
 
-instance (Path a) => Renderable a where
+instance Renderable Face where
     render = render_
 
 initGL :: IO ()
