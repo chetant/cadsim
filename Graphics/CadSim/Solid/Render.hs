@@ -7,9 +7,9 @@ import qualified Graphics.UI.GLFW as GLFW
 -- everything from here starts with gl or GL
 import Graphics.Rendering.OpenGL hiding(Point, translate)
 import qualified Graphics.Rendering.OpenGL as GL
-import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
 import Control.Monad(when, forever)
+import Data.IORef
 
 import Graphics.CadSim.Solid
 import Graphics.CadSim.Move
@@ -43,7 +43,7 @@ resizeScene e@(minPt, maxPt) width height = do
   viewport $= ((Position 0 0), (Size (fromIntegral width) (fromIntegral height)))
   matrixMode $= Projection
   loadIdentity
-  ortho2D (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh))
+  ortho (realToFrac (cx - hw)) (realToFrac (cx + hw)) (realToFrac (cy - hh)) (realToFrac (cy + hh)) 1000 (-1000)
   matrixMode $= (Modelview 0)
   loadIdentity
   flush
@@ -76,12 +76,13 @@ point x y z = Vector3 (realToFrac x) (realToFrac y) (realToFrac z)
 vert :: (Real a) => a -> a -> a -> Vertex3 GLdouble
 vert x y z = Vertex3 (realToFrac x) (realToFrac y) (realToFrac z)
 
-drawObj :: Bool -> Object -> IO ()
-drawObj drawOriginAxes obj = do
+drawObj :: GLdouble -> Bool -> Object -> IO ()
+drawObj rotY drawOriginAxes obj = do
   -- clear the screen and the depth bufer
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
   GL.translate $ point 0 0 (-0.5)
+  GL.rotate rotY $ point 0 1 0
 
   when drawOriginAxes drawOrigin
 
@@ -98,10 +99,6 @@ shutdown = do
   GLFW.terminate
   _ <- exitWith ExitSuccess
   return True
-
-keyPressed :: GLFW.KeyCallback
-keyPressed GLFW.KeyEsc True = shutdown >> return ()
-keyPressed _           _    = return ()
 
 render_ :: Object -> IO ()
 render_ o = do
@@ -123,7 +120,41 @@ render_ o = do
                      , GLFW.displayOptions_numDepthBits = 1
                      -- , GLFW.displayOptions_displayMode = GLFW.Fullscreen
                      }
-         renderFunc = drawObj True o
+     -- Init globals
+     rotX <- newIORef (0 :: GLdouble)
+     rotY <- newIORef (0 :: GLdouble)
+     startX <- newIORef (0 :: GLdouble)
+     startY <- newIORef (0 :: GLdouble)
+     currX <- newIORef (0 :: GLdouble)
+     currY <- newIORef (0 :: GLdouble)
+     leftClick <- newIORef False
+     rightClick <- newIORef False
+     let keyPressed :: GLFW.KeyCallback
+         keyPressed GLFW.KeyEsc True = shutdown >> return ()
+         -- keyPressed GLFW.KeyLeft True = readIORef rotY >>= writeIORef rotY . (1 +)
+         -- keyPressed GLFW.KeyRight True = readIORef rotY >>= writeIORef rotY . (1 -)
+         keyPressed _ _ = return ()
+
+         clickCB :: GLFW.MouseButtonCallback
+         clickCB GLFW.MouseButton0 True  = (readIORef currX >>= writeIORef startX) >>
+                                           (readIORef currY >>= writeIORef startY) >>
+                                           writeIORef leftClick True
+         clickCB GLFW.MouseButton0 False = writeIORef leftClick False
+
+         mouseMoveCB :: GLFW.MousePositionCallback
+         mouseMoveCB x y =  do
+              writeIORef currX (fromIntegral x)
+              writeIORef currY (fromIntegral y)
+              lClick <- readIORef leftClick
+              when lClick $ do
+                sx <- readIORef startX
+                sy <- readIORef startY
+                writeIORef rotX (fromIntegral y - sy)
+                writeIORef rotY (fromIntegral x - sx)
+
+         renderFunc = do
+              rY <- readIORef rotY
+              drawObj rY True o
      -- open a window
      True <- GLFW.openWindow dspOpts
      -- window starts at upper left corner of the screen
@@ -139,6 +170,8 @@ render_ o = do
      GLFW.setWindowSizeCallback (resizeScene extents')
      -- register the function called when the keyboard is pressed.
      GLFW.setKeyCallback keyPressed
+     GLFW.setMouseButtonCallback clickCB
+     GLFW.setMousePositionCallback mouseMoveCB
      GLFW.setWindowCloseCallback shutdown
      -- initialize our window.
      initGL

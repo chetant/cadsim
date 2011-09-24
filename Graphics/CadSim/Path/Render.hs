@@ -7,7 +7,6 @@ import qualified Graphics.UI.GLFW as GLFW
 -- everything from here starts with gl or GL
 import Graphics.Rendering.OpenGL hiding(Face, Point, translate)
 import qualified Graphics.Rendering.OpenGL as GL
-import Data.Bits((.|.))
 import System.Exit(exitWith, ExitCode(..))
 import Control.Monad(when, forever)
 
