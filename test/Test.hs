@@ -35,7 +35,5 @@ main = do
       r3 :: Face
       r3 = toPointX (-7.5) `translate` square 5
       s2 = (r1 `xor` r2) `xor` r3
-      obj = extrude soln 5
-  -- print obj
-  render $ obj
-  -- render s2
+      obj = extrude s2 30
+  render obj

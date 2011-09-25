@@ -162,12 +162,28 @@ radians = Radians
 sweep :: (Path.Path a) => a -> Radians -> Object
 sweep = undefined
 
+instance Convertible Path.Point Point where
+    safeConvert (Path.Point x y) = Right (Point x y 0)
+
 extrude :: (Path.Path a) => a -> Double -> Object
-extrude path len = s1 `join` s2
+extrude path len = foldl' join s1 (s2:sides)
   where s1 = unsafePerformIO $ tesselate path
-        s2 :: Object
         s2 = toPointZ len `translate` s1
-        numvs = V.length $ objPoints s1
+        sides = map mkSides loops
+        loops :: [V.Vector (Double, Double, Double)]
+        loops = map (V.fromList . map (toTuple . convert)) $ 
+                (Path.getExterior path) : (Path.getHoles path)
+        mkSides :: V.Vector (Double, Double, Double) -> Object
+        mkSides pts = Object (pts V.++ pts') sides
+            where numPts = V.length pts
+                  nPt i | i == (numPts-1) = 0
+                        | otherwise = i+1
+                  mkSide i = [(i, j, k), (i, k, l)]
+                      where j = nPt i
+                            k = j + numPts
+                            l = i + numPts
+                  sides = V.fromList $ concatMap mkSide [0..(numPts-1)]
+                  pts' = V.map (\(x, y, z)->(x, y, (z+len))) pts
 
 tesselate :: (Path.Path a) => a -> IO Object
 tesselate path = do
