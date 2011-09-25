@@ -39,20 +39,25 @@ type Extents = (Point, Point)
 instance Show Point where
     show (Point x y) = "(" ++ show x ++ ", " ++ show y ++ ")"
 
-instance Moveable Point Point Point where
-    translate (Point tx ty) (Point x y) = Point (x+tx) (y+ty)
-    scale     (Point sx sy) (Point x y) = Point (x*sx) (y*sy)
-    rotate _ path = undefined
+instance Moveable Point Point where
+    translate (Point x y) (Point tx ty) = Point (x+tx) (y+ty)
+    scale     (Point x y) (Point sx sy) = Point (x*sx) (y*sy)
+    rotate pt _ = undefined
 
-instance Moveable Double Point Point where
-    translate t (Point x y) = Point (x+t) (y+t)
-    scale     s (Point x y) = Point (x*s) (y*s)
-    rotate _ path = undefined
+instance Moveable Point Double where
+    translate (Point x y) t = Point (x+t) (y+t)
+    scale     (Point x y) s = Point (x*s) (y*s)
+    rotate pt _ = undefined
 
-instance Moveable Point Extents Extents where
-    translate t (p1, p2) = (translate t p1, translate t p2)
-    scale     s (p1, p2) = (scale s p1, scale s p2)
-    rotate _ path = undefined
+instance (Real a, Real b) => Moveable Point (a, b) where
+    translate (Point x y) (tx, ty) = Point (x + realToFrac tx) (y + realToFrac ty)
+    scale     (Point x y) (sx, sy) = Point (x * realToFrac sx) (y * realToFrac sy)
+    rotate pt _ = undefined
+
+instance Moveable Extents Point where
+    translate (p1, p2) t = (translate t p1, translate t p2)
+    scale     (p1, p2) s = (scale s p1, scale s p2)
+    rotate ext _ = undefined
 
 getCenter :: Extents -> Point
 getCenter ((Point x1 y1), (Point x2 y2)) = Point ((x2 + x1) / 2) ((y2 + y1) / 2)
@@ -61,7 +66,7 @@ instance Num Point where
     a + b = a `translate` b
     a * b = a `scale` b
     a - b = a `translate` (negate b)
-    negate a = (((-1) :: Double) `scale` a)
+    negate a = (a `scale` ((-1) :: Double))
     abs (Point x y) = Point (abs x) (abs y)
     signum (Point x y) = Point (signum x) (signum y)
     fromInteger = toPoint
@@ -143,10 +148,10 @@ instance Convertible Point C.IntPoint where
 --     getHoles ps = map (map convert . C.getPoints) . tail $ polys
 --         where polys = C.getPolys ps
 
-instance (Path a) => Convertible a (Double, C.Polygon) where
+instance Convertible Face (Double, C.Polygon) where
     safeConvert path = Right $ (sFactor, C.Polygon pts)
         where path' :: Face
-              path' = sFactor `scale` path
+              path' = scale path sFactor
               pts = map convert $ getExterior path'
               sFactor = getScaleFactor path
 
@@ -154,16 +159,16 @@ instance Convertible (Double, C.Polygon) Face where
     safeConvert (sFactor, C.Polygon pts) = Right $ Face exterior []
         where exterior = map (sc . convert) pts
               sc :: Point -> Point
-              sc = scale (1/sFactor)
+              sc = flip scale (1/sFactor)
 
-instance (Path a) => Convertible a (Double, C.Polygons) where
+instance Convertible Face (Double, C.Polygons) where
     safeConvert path = Right $ (sFactor, convertByScale sFactor path)
         where sFactor = getScaleFactor path
 
-convertByScale :: (Path a) => Double -> a -> C.Polygons
+convertByScale :: Double -> Face -> C.Polygons
 convertByScale sFactor path = C.Polygons (exterior:holes)
         where path' :: Face
-              path' = sFactor `scale` path
+              path' = scale path sFactor
               exterior = C.Polygon $ map convert $ getExterior path'
               holes = map (C.Polygon . map convert) $ getHoles path'
 
@@ -186,23 +191,32 @@ instance Convertible C.Polygons Face where
 --     safeConvert (Point x y) = Right $ C.IntPoint (round x) (round y)
 
 --------- Path Instance for Moveable and Boolean -------
-instance (Path a) => Moveable Point a Face where
-    translate tp path = Face exterior holes
+instance Moveable Face Point where
+    translate path tp = Face exterior holes
         where exterior = map (translate tp) $ getExterior path
               holes = map (map (translate tp)) $ getHoles path
-    scale sp path = Face exterior holes
+    scale path sp = Face exterior holes
         where exterior = map (scale sp) $ getExterior path
               holes = map (map (scale sp)) $ getHoles path
-    rotate _ path = undefined
+    rotate path _ = undefined
 
-instance (Path a) => Moveable Double a Face where
-    translate tp path = Face exterior holes
-        where exterior = map (translate tp) $ getExterior path
-              holes = map (map (translate tp)) $ getHoles path
-    scale sp path = Face exterior holes
-        where exterior = map (scale sp) $ getExterior path
-              holes = map (map (scale sp)) $ getHoles path
-    rotate _ path = undefined
+instance Moveable Face Double where
+    translate path tp = Face exterior holes
+        where exterior = map (flip translate tp) $ getExterior path
+              holes = map (map (flip translate tp)) $ getHoles path
+    scale path sp = Face exterior holes
+        where exterior = map (flip scale sp) $ getExterior path
+              holes = map (map (flip scale sp)) $ getHoles path
+    rotate path _ = undefined
+
+instance (Real a, Real b) => Moveable Face (a, b) where
+    translate path tp = Face exterior holes
+        where exterior = map (flip translate tp) $ getExterior path
+              holes = map (map (flip translate tp)) $ getHoles path
+    scale path sp = Face exterior holes
+        where exterior = map (flip scale sp) $ getExterior path
+              holes = map (map (flip scale sp)) $ getHoles path
+    rotate path _ = undefined
 
 getScaleFactor :: (Path a) => a -> Double
 getScaleFactor path = fromIntegral $ 2 ^ (32 - maxDigits 63)
@@ -215,14 +229,14 @@ getScaleFactor path = fromIntegral $ 2 ^ (32 - maxDigits 63)
                           1 -> (i+1)
                           _ -> maxDigits (i-1)
 
-doubleConvert :: (Path a, Path b) => a -> b -> (Double, C.Polygons, C.Polygons)
+doubleConvert :: Face -> Face -> (Double, C.Polygons, C.Polygons)
 doubleConvert a b = if sFa > sFb 
                     then (sFa, convertByScale sFa a, convertByScale sFa b)
                     else (sFb, convertByScale sFb a, convertByScale sFb b)
     where sFa = getScaleFactor a
           sFb = getScaleFactor b
 
-instance (Path a, Path b) => BooleanOps a b Face where
+instance BooleanOps Face Face Face where
     union a b = 
         case doubleConvert a b of
           (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.union` b')

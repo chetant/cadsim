@@ -44,20 +44,20 @@ type Extents = (Point, Point)
 instance Show Point where
     show (Point x y z) = "(" ++ show x ++ ", " ++ show y ++ ", " ++ show z ++ ")"
 
-instance Moveable Point Point Point where
-    translate (Point tx ty tz) (Point x y z) = Point (x+tx) (y+ty) (z+tz)
-    scale     (Point sx sy sz) (Point x y z) = Point (x*sx) (y*sy) (z*sz)
-    rotate _ path = undefined
+instance Moveable Point Point where
+    translate (Point x y z) (Point tx ty tz)  = Point (x+tx) (y+ty) (z+tz)
+    scale     (Point x y z) (Point sx sy sz) = Point (x*sx) (y*sy) (z*sz)
+    rotate pt _ = undefined
 
-instance Moveable Double Point Point where
-    translate t (Point x y z) = Point (x+t) (y+t) (z+t)
-    scale     s (Point x y z) = Point (x*s) (y*s) (z*s)
-    rotate _ path = undefined
+instance Moveable Point Double where
+    translate (Point x y z) t = Point (x+t) (y+t) (z+t)
+    scale     (Point x y z) s = Point (x*s) (y*s) (z*s)
+    rotate pt _ = undefined
 
-instance Moveable Point Extents Extents where
-    translate t (p1, p2) = (translate t p1, translate t p2)
-    scale     s (p1, p2) = (scale s p1, scale s p2)
-    rotate _ path = undefined
+instance Moveable Extents Point where
+    translate (p1, p2) t = (translate t p1, translate t p2)
+    scale     (p1, p2) s = (scale s p1, scale s p2)
+    rotate pt _ = undefined
 
 getCenter :: Extents -> Point
 getCenter ((Point x1 y1 z1), (Point x2 y2 z2)) = Point ((x2 + x1) / 2) ((y2 + y1) / 2) ((z2 + z1) / 2)
@@ -66,7 +66,7 @@ instance Num Point where
     a + b = a `translate` b
     a * b = a `scale` b
     a - b = a `translate` (negate b)
-    negate a = (((-1) :: Double) `scale` a)
+    negate a = scale a ((-1) :: Double)
     abs (Point x y z) = Point (abs x) (abs y) (abs z)
     signum (Point x y z) = Point (signum x) (signum y) (signum z)
     fromInteger = toPoint
@@ -127,15 +127,15 @@ data Object = Object {
 fromTuple (x, y, z) = Point x y z
 toTuple (Point x y z) = (x, y, z)
 
-instance Moveable Point Object Object where
-    translate pt obj = obj { objPoints = V.map (toTuple . translate pt . fromTuple) (objPoints obj) }
-    scale     pt obj = obj { objPoints = V.map (toTuple . scale pt . fromTuple)     (objPoints obj) }
-    rotate _ obj = undefined
+instance Moveable Object Point where
+    translate obj pt = obj {objPoints = V.map (toTuple . flip translate pt . fromTuple) (objPoints obj)}
+    scale     obj pt = obj {objPoints = V.map (toTuple . flip scale pt . fromTuple) (objPoints obj)}
+    rotate    obj _ = undefined
 
-instance Moveable Double Object Object where
-    translate t obj = obj { objPoints = V.map (toTuple . translate t . fromTuple) (objPoints obj) }
-    scale     s obj = obj { objPoints = V.map (toTuple . scale s . fromTuple)     (objPoints obj) }
-    rotate _ obj = undefined
+instance Moveable Object Double where
+    translate obj t = obj { objPoints = V.map (toTuple . flip translate t . fromTuple) (objPoints obj) }
+    scale     obj s = obj { objPoints = V.map (toTuple . flip scale s . fromTuple)     (objPoints obj) }
+    rotate    obj _ = undefined
 
 instance Solid Object where
     getVertices = map fromTuple . V.toList . objPoints
@@ -168,7 +168,7 @@ instance Convertible Path.Point Point where
 extrude :: (Path.Path a) => a -> Double -> Object
 extrude path len = foldl' join s1 (s2:sides)
   where s1 = unsafePerformIO $ tesselate path
-        s2 = toPointZ len `translate` s1
+        s2 = translate s1 (toPointZ len)
         sides = map mkSides loops
         loops :: [V.Vector (Double, Double, Double)]
         loops = map (V.fromList . map (toTuple . convert)) $ 

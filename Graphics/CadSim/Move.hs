@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies #-}
 module Graphics.CadSim.Move where
 
-class Moveable a b c | c->b where
-    translate :: a -> b -> c
-    scale :: a -> b -> c
-    rotate :: a -> b -> c
+class Moveable a b where
+    translate :: a -> b -> a
+    scale :: a -> b -> a
+    rotate :: a -> b -> a
