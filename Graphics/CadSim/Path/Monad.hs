@@ -19,11 +19,12 @@ data PBuilder = PBuilder {
 
 type PathBuild a = State PBuilder a
 
+setExterior_ [] face = face
 setExterior_ ps face = face { exterior = ps }
 
 -- |Execute the monad and get the Face (Path instance)
 getPath :: PathBuild a -> Face
-getPath m = builderFace $ execState m initState
+getPath m = builderFace $ execState (m >> close) initState
     where initState = PBuilder (Point 0 0) [] setExterior_ (Face [] [])
 
 -- |Select the exterior to work on
@@ -33,7 +34,8 @@ onExterior = modify (\(PBuilder xy p _ f) -> PBuilder xy p setExterior_ f)
 -- |Select the hole to work on
 onHole :: PathBuild ()
 onHole = modify (\(PBuilder xy p _ f) -> PBuilder xy p setHole f)
-    where setHole ps face = face { holes = (ps:holes face) }
+    where setHole [] face = face
+          setHole ps face = face { holes = (ps:holes face) }
 
 -- |Moves pointer to location
 moveTo :: (Convertible a Point) => a -> PathBuild ()

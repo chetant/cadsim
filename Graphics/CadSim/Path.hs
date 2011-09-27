@@ -13,7 +13,6 @@ module Graphics.CadSim.Path
 ,square
 ) where
 
-import GHC.Float(float2Double)
 import Data.List(foldl')
 import Data.Convertible
 import Data.Word
@@ -84,9 +83,6 @@ distX (Point x1 _) (Point x2 _) = x2 - x1
 distY :: Point -> Point -> Double
 distY (Point _ y1) (Point _ y2) = y2 - y1
 
-instance Convertible Double Double where
-    safeConvert = Right
-
 toPoint :: (Real n) => n -> Point
 toPoint n = Point n' n'
     where n' = realToFrac n
@@ -123,8 +119,8 @@ data Face = Face {
 mapTuple f = map (\(x,y) -> Point (f x) (f y))
 
 --------- Instances for Path -------
-instance Convertible a Double => Path [(a, a)] where
-    getExterior = mapTuple convert
+instance Real a => Path [(a, a)] where
+    getExterior = mapTuple realToFrac
 
 instance Path Face where
     getExterior = exterior
@@ -137,16 +133,6 @@ instance Convertible C.IntPoint Point where
 
 instance Convertible Point C.IntPoint where
     safeConvert (Point x y) = Right $ C.IntPoint (round x) (round y)
-
--- instance Path C.Polygon where
---     getExterior = map convert . C.getPoints
---     getHoles _ = []
-
--- instance Path C.Polygons where
---     getExterior ps = if null polys then [] else (map convert . C.getPoints . head) polys
---         where polys = C.getPolys ps
---     getHoles ps = map (map convert . C.getPoints) . tail $ polys
---         where polys = C.getPolys ps
 
 instance Convertible Face (Double, C.Polygon) where
     safeConvert path = Right $ (sFactor, C.Polygon pts)
@@ -186,9 +172,6 @@ instance Convertible C.Polygons Face where
         where exterior = if null polys then [] else (map convert . C.getPoints . head) polys
               holes = map (map convert . C.getPoints) . tail $ polys
               polys = C.getPolys ps
-
--- instance Convertible Point C.IntPoint where
---     safeConvert (Point x y) = Right $ C.IntPoint (round x) (round y)
 
 --------- Path Instance for Moveable and Boolean -------
 instance Moveable Face Point where

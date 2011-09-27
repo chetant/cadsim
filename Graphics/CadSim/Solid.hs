@@ -54,6 +54,15 @@ instance Moveable Point Double where
     scale     (Point x y z) s = Point (x*s) (y*s) (z*s)
     rotate pt _ = undefined
 
+instance (Real a, Real b, Real c) => Moveable Point (a,b,c) where
+    translate (Point x y z) (tx, ty, tz) = Point (x + realToFrac tx) 
+                                                 (y + realToFrac ty)
+                                                 (z + realToFrac tz)
+    scale     (Point x y z) (sx, sy, sz) = Point (x * realToFrac sx)
+                                                 (y * realToFrac sy)
+                                                 (z * realToFrac sz)
+    rotate pt _ = undefined
+
 instance Moveable Extents Point where
     translate (p1, p2) t = (translate t p1, translate t p2)
     scale     (p1, p2) s = (scale s p1, scale s p2)
@@ -135,6 +144,11 @@ instance Moveable Object Point where
 instance Moveable Object Double where
     translate obj t = obj { objPoints = V.map (toTuple . flip translate t . fromTuple) (objPoints obj) }
     scale     obj s = obj { objPoints = V.map (toTuple . flip scale s . fromTuple)     (objPoints obj) }
+    rotate    obj _ = undefined
+
+instance (Real a, Real b, Real c) => Moveable Object (a,b,c) where
+    translate obj pt = obj {objPoints = V.map (toTuple . flip translate pt . fromTuple) (objPoints obj)}
+    scale     obj pt = obj {objPoints = V.map (toTuple . flip scale pt . fromTuple) (objPoints obj)}
     rotate    obj _ = undefined
 
 instance Solid Object where
