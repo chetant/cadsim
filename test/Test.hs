@@ -6,7 +6,7 @@ import Graphics.CadSim.Path.Render
 import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
 import Graphics.CadSim.Move
-import Graphics.CadSim.Solid(extrude, sweep)
+import Graphics.CadSim.Solid hiding (toPointX)
 import Graphics.CadSim.Solid.Render
 
 a = do
@@ -24,7 +24,8 @@ main = do
       r2' = square 5 `translate` (0, 7.5)
       r3 = square 5 `translate` toPointX (-7.5)
       s2 = r1 `xor` r2 `xor` r3
-      s1 = getPath b `xor` a
+      s1 = getPath b `intersection` getPath a
       obj = extrude s2 30
-      obj' = extrude s2 30
-  render s1
+      obj' = sweep s1 (degrees 360)
+  --render s1
+  render obj'

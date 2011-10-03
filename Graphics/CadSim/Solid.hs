@@ -8,11 +8,13 @@ module Graphics.CadSim.Solid
 ,Extents(..), getCenter
 ,Solid(..)
 ,Object(..)
-,join, extrude, sweep
+,Radians, degrees, radians
+,join, extrude, sweep, optimize
 ) where
 
-import Data.List(foldl')
+import Data.List(foldl', mapAccumL)
 import Control.Monad(foldM)
+import Control.Monad.State hiding(join)
 import System.IO.Unsafe(unsafePerformIO)
 import Data.Maybe(fromJust)
 import qualified Data.Set as Set
@@ -23,6 +25,7 @@ import Graphics.Rendering.OpenGL.Raw.Core31(GLdouble)
 import Graphics.Rendering.OpenGL.GL.VertexSpec(Normal3(..))
 import Graphics.Rendering.OpenGL.GLU.Tessellation
 import qualified Data.Vector.Unboxed as V
+import Data.Vector.Unboxed((!))
 import qualified Data.Vector.Unboxed.Mutable as VM
 
 import Graphics.CadSim.Move
@@ -155,38 +158,99 @@ instance Solid Object where
     getVertices = map fromTuple . V.toList . objPoints
     getTris obj = map mkTri $ V.toList $ objTris obj
         where vs = objPoints obj
-              mkTri (iv1, iv2, iv3) = (fromTuple $ vs V.! iv1, 
-                                       fromTuple $ vs V.! iv2, 
-                                       fromTuple $ vs V.! iv3)
+              mkTri (iv1, iv2, iv3) = (fromTuple $ vs ! iv1, 
+                                       fromTuple $ vs ! iv2, 
+                                       fromTuple $ vs ! iv3)
 
-newtype Radians = Radians Double
+newtype Radians = Radians { unRadians :: Double }
 
+optimize :: Object -> Object
+optimize = undefined
+
+-- |Given two objects, fuses them. 
+-- |NOTE: common points are not eliminated, use 'optimize' for that
 join :: Object -> Object -> Object
 join o1 o2 = Object vs tris
     where numvs = V.length $ objPoints o1
           vs = objPoints o1 V.++ objPoints o2
           tris = objTris o1 V.++ (V.map (\(v1, v2, v3) -> (v1+numvs,v2+numvs,v3+numvs)) $ objTris o2)
 
+-- |Converts degrees to 'Radians' type
 degrees :: Real a => a -> Radians
-degrees deg = Radians $ (realToFrac deg * pi) / 360.0
+degrees deg = Radians $ (realToFrac deg * 2 * pi) / 360.0
 
+-- |Constructs a 'Radians' type
 radians :: Double -> Radians
 radians = Radians
 
+getloops :: Path.Path a => a -> [V.Vector (Double, Double, Double)]
+getloops path = map (V.fromList . map (toTuple . convert)) $ 
+                (Path.getExterior path) : (Path.getHoles path)
+
+-- |Sweeps a path through r radians around the x axis using the right hand rule (+ve radians are counterclockwise when x-axis is pointing at you
+-- |NOTE: common points are not eliminated, use 'optimize' for that
 sweep :: (Path.Path a) => a -> Radians -> Object
-sweep = undefined
+sweep path r = foldr1 join $ map getObj loops
+    where loops = (Path.getExterior path) : (Path.getHoles path)
+          getObj loop = Object points tris
+              where points = V.fromList $ map getPt (filter isInv pis) ++ concatMap rotPt pis
+                    tris = V.fromList $ getTris pis
+                    ((nInv, nPts), pis@(pend:_)) = mapAccumL proc (0,0) loop
+                    getTris :: [(Bool, Int, (Double, Double, Double))] -> [(Int, Int, Int)]
+                    getTris (p1:p2:ps) = mkTri p1 p2 ++ getTris (p2:ps)
+                    getTris (p1:[]) = mkTri pend p1
+                    getTris [] = []
+                    mkTri :: (Bool, Int, (Double, Double, Double)) 
+                          -> (Bool, Int, (Double, Double, Double)) 
+                          -> [(Int, Int, Int)]
+                    mkTri (True,_,_) (True,_,_) = []
+                    mkTri (True,i,_) (False,j,_) = let d = nInv + numSegs * j
+                                                   in map (\k -> (i, d+k, d+nextSg k)) segs
+                    mkTri (False,j,_) (True,i,_) = let d = nInv + numSegs * j
+                                                   in map (\k -> (i, d+k, d+nextSg k)) segs
+                    mkTri (False,i,_) (False,j,_) = let di = nInv + numSegs * i
+                                                        dj = nInv + numSegs * j
+                                                        nxt k = nextSg k
+                                                    in concatMap (\k -> [(di+k, dj+k, di+nxt k)
+                                                                        ,(dj+k, di+nxt k, dj+nxt k)])
+                                                       segs
+          nextSg i | i == (numSegs - 1) = 0
+                   | i >= numSegs = error $ "Invalid index in nextSg:" ++ show i
+                   | otherwise = i+1
+
+          -- where pis = ptInfo path
+          getPt (_,_,p) = p
+          isInv (True,_,_) = True
+          isInv _          = False
+          rotPt (True,_,_) = []
+          rotPt (_,_,p)    = map (rot p) rads
+          -- ptInfo = snd . mapAccumL proc (0,0)
+          -- numInvs = fst . fst . mapAccumL proc (0,0)
+          proc :: (Int, Int) -> Path.Point -> ((Int, Int), (Bool, Int, (Double, Double, Double)))
+          proc (i,j) p | isInvariant p = ((i+1, j), (True, i, toTuple (convert p)))
+                       | otherwise     = ((i, j+1), (False,j, toTuple (convert p)))
+          rads = map (\i -> (unRadians r) * (realToFrac i) / (realToFrac subDivs)) [0..(subDivs-1)]
+          -- FOR NON FULL SWEEPS: rads = map (\i -> (unRadians r) * (realToFrac i) / subDivs) [0..subDivs]
+          rot (x,y,_) r = (x, ((-y) * sin r), (y * cos r))
+          isInvariant p = abs (Path.pointY p) < abs ythresh
+          subDivs :: Int
+          subDivs = 32
+          segs = [0..(numSegs-1)]
+          numSegs = subDivs
+          -- numSegs = subDivs - 1
+          ythresh = 1E-10
 
 instance Convertible Path.Point Point where
     safeConvert (Path.Point x y) = Right (Point x y 0)
 
+-- |Extrudes a path through the z-axis with specified length
+-- |NOTE: common points are not eliminated, use 'optimize' for that
 extrude :: (Path.Path a) => a -> Double -> Object
 extrude path len = foldl' join s1 (s2:sides)
   where s1 = unsafePerformIO $ tesselate path
         s2 = translate s1 (toPointZ len)
         sides = map mkSides loops
-        loops :: [V.Vector (Double, Double, Double)]
-        loops = map (V.fromList . map (toTuple . convert)) $ 
-                (Path.getExterior path) : (Path.getHoles path)
+        loops = getloops path
         mkSides :: V.Vector (Double, Double, Double) -> Object
         mkSides pts = Object (pts V.++ pts') sides
             where numPts = V.length pts
