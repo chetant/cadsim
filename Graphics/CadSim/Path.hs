@@ -9,14 +9,13 @@ module Graphics.CadSim.Path
 ,Face(..)
 ,Path(..)
 ,getScaleFactor
-,rectangle
-,square
+,rectangle,square,circle
 ) where
 
 import Data.List(foldl')
 import Data.Convertible
 import Data.Word
-import Data.Bits
+import Data.Bits((.&.),shift)
 import System.IO.Unsafe(unsafePerformIO)
 
 import qualified Algebra.Clipper as C
@@ -41,22 +40,24 @@ instance Show Point where
 instance Moveable Point Point where
     translate (Point x y) (Point tx ty) = Point (x+tx) (y+ty)
     scale     (Point x y) (Point sx sy) = Point (x*sx) (y*sy)
-    rotate pt _ = undefined
+    rotate _ _ = undefined
 
 instance Moveable Point Double where
     translate (Point x y) t = Point (x+t) (y+t)
     scale     (Point x y) s = Point (x*s) (y*s)
-    rotate pt _ = undefined
+    rotate    (Point x y) r = let cosR = cos r
+                                  sinR = sin r
+                              in Point (x * cosR - y * sinR) (y * cosR + x * sinR)
 
 instance (Real a, Real b) => Moveable Point (a, b) where
     translate (Point x y) (tx, ty) = Point (x + realToFrac tx) (y + realToFrac ty)
     scale     (Point x y) (sx, sy) = Point (x * realToFrac sx) (y * realToFrac sy)
-    rotate pt _ = undefined
+    rotate _ _ = undefined
 
 instance Moveable Extents Point where
     translate (p1, p2) t = (translate t p1, translate t p2)
     scale     (p1, p2) s = (scale s p1, scale s p2)
-    rotate ext _ = undefined
+    rotate _ _ = undefined
 
 getCenter :: Extents -> Point
 getCenter ((Point x1 y1), (Point x2 y2)) = Point ((x2 + x1) / 2) ((y2 + y1) / 2)
@@ -219,7 +220,7 @@ doubleConvert a b = if sFa > sFb
     where sFa = getScaleFactor a
           sFb = getScaleFactor b
 
-instance BooleanOps Face Face Face where
+instance BooleanOps Face where
     union a b = 
         case doubleConvert a b of
           (sFactor, a', b') -> convert (sFactor, unsafePerformIO $ a' `C.union` b')
@@ -243,3 +244,10 @@ rectangle width height = Face [p1, p2, p3, p4] []
           p2 = Point (hWidth) (-hHeight)
           p3 = Point (hWidth) (hHeight)
           p4 = Point (-hWidth) (hHeight)
+
+circle :: Double -> Face
+circle r = Face (map (rotate p) rads) []
+    where numSegs = 32
+          rads :: [Double]
+          rads = map (\i -> 2 * pi * (realToFrac i) / (realToFrac numSegs)) [0..(numSegs-1)]
+          p = Point r 0

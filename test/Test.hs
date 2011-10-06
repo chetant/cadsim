@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 module Main where
 
 import Graphics.CadSim.Render
@@ -6,7 +7,7 @@ import Graphics.CadSim.Path.Render
 import Graphics.CadSim.Path.Monad
 import Graphics.CadSim.Boolean
 import Graphics.CadSim.Move
-import Graphics.CadSim.Solid hiding (toPointX)
+import Graphics.CadSim.Solid hiding (toPointX, toPointY)
 import Graphics.CadSim.Solid.Render
 
 a = do
@@ -27,5 +28,6 @@ main = do
       s1 = getPath b `intersection` getPath a
       obj = extrude s2 30
       obj' = sweep s1 (degrees 360)
-  --render s1
-  render obj'
+  --render s2
+  -- render $ circle 2 `union` rectangle 1 6
+  render $ sweep ((circle 2 `union` rectangle 6 1) `translate` toPointY 6) (degrees 360)
